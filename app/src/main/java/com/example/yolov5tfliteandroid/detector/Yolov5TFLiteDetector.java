@@ -228,7 +228,7 @@ public class Yolov5TFLiteDetector {
 //            options.addDelegate(nnApiDelegate);
 //        }
 
-    }
+//}
 
 
     /**
