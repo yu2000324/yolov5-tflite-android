@@ -2,12 +2,7 @@ package com.example.yolov5tfliteandroid.analysis;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Matrix;
-import android.graphics.Paint;
-import android.graphics.RectF;
-import android.provider.ContactsContract;
 import android.util.Log;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -19,16 +14,10 @@ import androidx.camera.view.PreviewView;
 
 import com.example.yolov5tfliteandroid.detector.Yolov5TFLiteDetector;
 import com.example.yolov5tfliteandroid.utils.ImageProcess;
-import com.example.yolov5tfliteandroid.utils.Recognition;
-
-import org.tensorflow.lite.support.image.TensorImage;
-
-import java.util.ArrayList;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.core.ObservableEmitter;
-import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
 
@@ -137,33 +126,33 @@ public class FullScreenAnalyse implements ImageAnalysis.Analyzer {
             Matrix modelToPreviewTransform = new Matrix();
             previewToModelTransform.invert(modelToPreviewTransform);
 
-            ArrayList<Recognition> recognitions = yolov5TFLiteDetector.detect(modelInputBitmap);
-
-            Bitmap emptyCropSizeBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Bitmap.Config.ARGB_8888);
-            Canvas cropCanvas = new Canvas(emptyCropSizeBitmap);
-            // 边框画笔
-            Paint boxPaint = new Paint();
-            boxPaint.setStrokeWidth(5);
-            boxPaint.setStyle(Paint.Style.STROKE);
-            boxPaint.setColor(Color.RED);
-            // 字体画笔
-            Paint textPain = new Paint();
-            textPain.setTextSize(50);
-            textPain.setColor(Color.RED);
-            textPain.setStyle(Paint.Style.FILL);
-
-            for (Recognition res : recognitions) {
-                RectF location = res.getLocation();
-                String label = res.getLabelName();
-                float confidence = res.getConfidence();
-                modelToPreviewTransform.mapRect(location);
-                cropCanvas.drawRect(location, boxPaint);
-                cropCanvas.drawText(label + ":" + String.format("%.2f", confidence), location.left, location.top, textPain);
-            }
-            long end = System.currentTimeMillis();
-            long costTime = (end - start);
-            image.close();
-            emitter.onNext(new Result(costTime, emptyCropSizeBitmap));
+//            ArrayList<Recognition> recognitions = yolov5TFLiteDetector.detect(modelInputBitmap);
+//
+//            Bitmap emptyCropSizeBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Bitmap.Config.ARGB_8888);
+//            Canvas cropCanvas = new Canvas(emptyCropSizeBitmap);
+//            // 边框画笔
+//            Paint boxPaint = new Paint();
+//            boxPaint.setStrokeWidth(5);
+//            boxPaint.setStyle(Paint.Style.STROKE);
+//            boxPaint.setColor(Color.RED);
+//            // 字体画笔
+//            Paint textPain = new Paint();
+//            textPain.setTextSize(50);
+//            textPain.setColor(Color.RED);
+//            textPain.setStyle(Paint.Style.FILL);
+//
+//            for (Recognition res : recognitions) {
+//                RectF location = res.getLocation();
+//                String label = res.getLabelName();
+//                float confidence = res.getConfidence();
+//                modelToPreviewTransform.mapRect(location);
+//                cropCanvas.drawRect(location, boxPaint);
+//                cropCanvas.drawText(label + ":" + String.format("%.2f", confidence), location.left, location.top, textPain);
+//            }
+//            long end = System.currentTimeMillis();
+//            long costTime = (end - start);
+//            image.close();
+//            emitter.onNext(new Result(costTime, emptyCropSizeBitmap));
         }).subscribeOn(Schedulers.io()) // 这里定义被观察者,也就是上面代码的线程, 如果没定义就是主线程同步, 非异步
                 // 这里就是回到主线程, 观察者接受到emitter发送的数据进行处理
                 .observeOn(AndroidSchedulers.mainThread())

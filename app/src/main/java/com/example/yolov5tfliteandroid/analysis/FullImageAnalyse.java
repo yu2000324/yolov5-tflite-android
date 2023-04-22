@@ -7,8 +7,6 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
-import android.util.Log;
-import android.util.Size;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -17,18 +15,14 @@ import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.view.PreviewView;
 
-import com.example.yolov5tfliteandroid.MainActivity;
 import com.example.yolov5tfliteandroid.detector.Yolov5TFLiteDetector;
 import com.example.yolov5tfliteandroid.utils.ImageProcess;
-import com.example.yolov5tfliteandroid.utils.Recognition;
 
-import java.util.ArrayList;
+import java.util.List;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.core.ObservableEmitter;
-import io.reactivex.rxjava3.core.ObservableOnSubscribe;
-import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
 public class FullImageAnalyse implements ImageAnalysis.Analyzer {
@@ -101,40 +95,15 @@ public class FullImageAnalyse implements ImageAnalysis.Analyzer {
             // 原图bitmap
             Bitmap imageBitmap = Bitmap.createBitmap(imagewWidth, imageHeight, Bitmap.Config.ARGB_8888);
             imageBitmap.setPixels(rgbBytes, 0, imagewWidth, 0, 0, imagewWidth, imageHeight);
+            Matrix matrix = new Matrix();
+            matrix.postRotate(90);
+           Bitmap modelInputBitmap= Bitmap.createBitmap(imageBitmap, 0, 0, imageBitmap.getWidth(), imageBitmap.getHeight(),
+                            matrix, false);
+           long model_start= System.currentTimeMillis();
+            List<RectF> rectFs = yolov5TFLiteDetector.detect(modelInputBitmap);
+            long model_end=System.currentTimeMillis();
 
-            // 图片适应屏幕fill_start格式的bitmap
-            double scale = Math.max(
-                    previewHeight / (double) (rotation % 180 == 0 ? imagewWidth : imageHeight),
-                    previewWidth / (double) (rotation % 180 == 0 ? imageHeight : imagewWidth)
-            );
-            Matrix fullScreenTransform = imageProcess.getTransformationMatrix(
-                    imagewWidth, imageHeight,
-                    (int) (scale * imageHeight), (int) (scale * imagewWidth),
-                    rotation % 180 == 0 ? 90 : 0, false
-            );
-
-            // 适应preview的全尺寸bitmap
-            Bitmap fullImageBitmap = Bitmap.createBitmap(imageBitmap, 0, 0, imagewWidth, imageHeight, fullScreenTransform, false);
-            // 裁剪出跟preview在屏幕上一样大小的bitmap
-            Bitmap cropImageBitmap = Bitmap.createBitmap(fullImageBitmap, 0, 0, previewWidth, previewHeight);
-
-            // 模型输入的bitmap
-            Matrix previewToModelTransform =
-                    imageProcess.getTransformationMatrix(
-                            cropImageBitmap.getWidth(), cropImageBitmap.getHeight(),
-                            yolov5TFLiteDetector.getInputSize().getWidth(),
-                            yolov5TFLiteDetector.getInputSize().getHeight(),
-                            0, false);
-            Bitmap modelInputBitmap = Bitmap.createBitmap(cropImageBitmap, 0, 0,
-                    cropImageBitmap.getWidth(), cropImageBitmap.getHeight(),
-                    previewToModelTransform, false);
-
-            Matrix modelToPreviewTransform = new Matrix();
-            previewToModelTransform.invert(modelToPreviewTransform);
-
-            ArrayList<Recognition> recognitions = yolov5TFLiteDetector.detect(modelInputBitmap);
 //            ArrayList<Recognition> recognitions = yolov5TFLiteDetector.detect(imageBitmap);
-
             Bitmap emptyCropSizeBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Bitmap.Config.ARGB_8888);
             Canvas cropCanvas = new Canvas(emptyCropSizeBitmap);
 //            Paint white = new Paint();
@@ -152,13 +121,11 @@ public class FullImageAnalyse implements ImageAnalysis.Analyzer {
             textPain.setColor(Color.RED);
             textPain.setStyle(Paint.Style.FILL);
 
-            for (Recognition res : recognitions) {
-                RectF location = res.getLocation();
-                String label = res.getLabelName();
-                float confidence = res.getConfidence();
-                modelToPreviewTransform.mapRect(location);
-                cropCanvas.drawRect(location, boxPaint);
-                cropCanvas.drawText(label + ":" + String.format("%.2f", confidence), location.left, location.top, textPain);
+            if (rectFs!=null ){
+                for (RectF rectF : rectFs) {
+                    cropCanvas.drawRect(rectF, boxPaint);
+//                  modelToPreviewTransform.mapRect(rectF);
+                }
             }
             long end = System.currentTimeMillis();
             long costTime = (end - start);

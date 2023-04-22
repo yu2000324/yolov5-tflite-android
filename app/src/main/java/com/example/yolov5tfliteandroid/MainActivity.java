@@ -1,7 +1,6 @@
 package com.example.yolov5tfliteandroid;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import androidx.camera.view.PreviewView;
 
 import android.graphics.Color;
@@ -43,7 +42,6 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * 获取屏幕旋转角度,0表示拍照出来的图片是横屏
-     *
      */
     protected int getScreenOrientation() {
         switch (getWindowManager().getDefaultDisplay().getRotation()) {
@@ -67,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
         // 加载模型
         try {
             this.yolov5TFLiteDetector = new Yolov5TFLiteDetector();
-            this.yolov5TFLiteDetector.setModelFile(modelName);
+            this.yolov5TFLiteDetector.setModelFile();
 //            this.yolov5TFLiteDetector.addNNApiDelegate();
             this.yolov5TFLiteDetector.addGPUDelegate();
             this.yolov5TFLiteDetector.initialModel(this);
@@ -130,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
                 String model = (String) adapterView.getItemAtPosition(i);
                 Toast.makeText(MainActivity.this, "loading model: " + model, Toast.LENGTH_LONG).show();
                 initModel(model);
-                if(IS_FULL_SCREEN){
+                if (IS_FULL_SCREEN) {
                     cameraPreviewWrap.removeAllViews();
                     FullScreenAnalyse fullScreenAnalyse = new FullScreenAnalyse(MainActivity.this,
                             cameraPreviewMatch,
@@ -140,7 +138,7 @@ public class MainActivity extends AppCompatActivity {
                             frameSizeTextView,
                             yolov5TFLiteDetector);
                     cameraProcess.startCamera(MainActivity.this, fullScreenAnalyse, cameraPreviewMatch);
-                }else{
+                } else {
                     cameraPreviewMatch.removeAllViews();
                     FullImageAnalyse fullImageAnalyse = new FullImageAnalyse(
                             MainActivity.this,
@@ -155,6 +153,7 @@ public class MainActivity extends AppCompatActivity {
 
 
             }
+
             @Override
             public void onNothingSelected(AdapterView<?> adapterView) {
 

@@ -3,101 +3,52 @@ package com.example.yolov5tfliteandroid.detector;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.RectF;
-import android.os.Binder;
 import android.os.Build;
 import android.util.Log;
 import android.util.Size;
 import android.widget.Toast;
 
-import com.example.yolov5tfliteandroid.MainActivity;
-import com.example.yolov5tfliteandroid.utils.Recognition;
-
-import org.checkerframework.checker.nullness.Opt;
-import org.checkerframework.checker.units.qual.C;
 import org.tensorflow.lite.DataType;
-import org.tensorflow.lite.Delegate;
 import org.tensorflow.lite.Interpreter;
-import org.tensorflow.lite.InterpreterFactory;
 import org.tensorflow.lite.gpu.GpuDelegate;
 import org.tensorflow.lite.gpu.CompatibilityList;
 import org.tensorflow.lite.nnapi.NnApiDelegate;
 import org.tensorflow.lite.support.common.FileUtil;
-import org.tensorflow.lite.support.common.TensorProcessor;
-import org.tensorflow.lite.support.common.ops.CastOp;
-import org.tensorflow.lite.support.common.ops.DequantizeOp;
 import org.tensorflow.lite.support.common.ops.NormalizeOp;
-import org.tensorflow.lite.support.common.ops.QuantizeOp;
 import org.tensorflow.lite.support.image.ImageProcessor;
 import org.tensorflow.lite.support.image.TensorImage;
 import org.tensorflow.lite.support.image.ops.ResizeOp;
-import org.tensorflow.lite.support.metadata.MetadataExtractor;
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
-import org.tensorflow.lite.support.metadata.MetadataParser;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.PriorityQueue;
 
 
 public class Yolov5TFLiteDetector {
 
     private final Size INPNUT_SIZE = new Size(320, 320);
-    private final int[] OUTPUT_SIZE = new int[]{1, 6300, 85};
-    private Boolean IS_INT8 = false;
-    private final float DETECT_THRESHOLD = 0.25f;
-    private final float IOU_THRESHOLD = 0.45f;
-    private final float IOU_CLASS_DUPLICATED_THRESHOLD = 0.7f;
-    private final String MODEL_YOLOV5S = "yolov5s-fp16-320-metadata.tflite";
-//    private final String MODEL_YOLOV5S = "yolov5s-dynamic.tflite";
-    private final String MODEL_YOLOV5N =  "yolov5n-fp16-320.tflite";
-    private final String MODEL_YOLOV5M = "yolov5m-fp16-320.tflite";
-    private final String MODEL_YOLOV5S_INT8 = "yolov5s-int8-320.tflite";
-    private final String LABEL_FILE = "coco_label.txt";
-    MetadataExtractor.QuantizationParams input5SINT8QuantParams = new MetadataExtractor.QuantizationParams(0.003921568859368563f, 0);
-    MetadataExtractor.QuantizationParams output5SINT8QuantParams = new MetadataExtractor.QuantizationParams(0.006305381190031767f, 5);
+    private final int[] OUTPUT_SIZE = new int[]{1, 6300, 6};
     private String MODEL_FILE;
 
     private Interpreter tflite;
-    private List<String> associatedAxisLabels;
     Interpreter.Options options = new Interpreter.Options();
 
     public String getModelFile() {
         return this.MODEL_FILE;
     }
 
-    public void setModelFile(String modelFile){
-        switch (modelFile) {
-            case "yolov5s":
-                IS_INT8 = false;
-                MODEL_FILE = MODEL_YOLOV5S;
-                break;
-            case "yolov5n":
-                IS_INT8 = false;
-                MODEL_FILE = MODEL_YOLOV5N;
-                break;
-            case "yolov5m":
-                IS_INT8 = false;
-                MODEL_FILE = MODEL_YOLOV5M;
-                break;
-            case "yolov5s-int8":
-                IS_INT8 = true;
-                MODEL_FILE = MODEL_YOLOV5S_INT8;
-                break;
-            default:
-                Log.i("tfliteSupport", "Only yolov5s/n/m/sint8 can be load!");
-        }
+    public void setModelFile() {
+        MODEL_FILE = "best-s-fp16.tflite";
     }
 
-    public String getLabelFile() {
-        return this.LABEL_FILE;
+    public Size getInputSize() {
+        return this.INPNUT_SIZE;
     }
-
-    public Size getInputSize(){return this.INPNUT_SIZE;}
-    public int[] getOutputSize(){return this.OUTPUT_SIZE;}
 
     /**
      * 初始化模型, 可以通过 addNNApiDelegate(), addGPUDelegate()提前加载相应代理
@@ -112,8 +63,6 @@ public class Yolov5TFLiteDetector {
             tflite = new Interpreter(tfliteModel, options);
             Log.i("tfliteSupport", "Success reading model: " + MODEL_FILE);
 
-            associatedAxisLabels = FileUtil.loadLabels(activity, LABEL_FILE);
-            Log.i("tfliteSupport", "Success reading label: " + LABEL_FILE);
 
         } catch (IOException e) {
             Log.e("tfliteSupport", "Error reading model or label: ", e);
@@ -127,233 +76,123 @@ public class Yolov5TFLiteDetector {
      * @param bitmap
      * @return
      */
-    public ArrayList<Recognition> detect(Bitmap bitmap) {
+    public List<RectF> detect(Bitmap bitmap) {
+//        Bitmap bitmap2 = BitmapFactory.decodeResource(Myapp.application.getResources(), R.drawable.p407);
+        TensorImage tfliteInput = new TensorImage(DataType.FLOAT32);
+        //先缩放成 320 * 320 像素的图片，再进行归一化 每个数组数据 /255,数据分布在 [0,1]
+        ImageProcessor processor = new ImageProcessor.Builder()
+                .add(new ResizeOp(INPNUT_SIZE.getHeight(), INPNUT_SIZE.getWidth(), ResizeOp.ResizeMethod.BILINEAR))
+                .add(new NormalizeOp(0, 255))
+                .build();
 
-        // yolov5s-tflite的输入是:[1, 320, 320,3], 摄像头每一帧图片需要resize,再归一化
-        TensorImage yolov5sTfliteInput;
-        ImageProcessor imageProcessor;
-        if(IS_INT8){
-            imageProcessor =
-                    new ImageProcessor.Builder()
-                            .add(new ResizeOp(INPNUT_SIZE.getHeight(), INPNUT_SIZE.getWidth(), ResizeOp.ResizeMethod.BILINEAR))
-                            .add(new NormalizeOp(0, 255))
-                            .add(new QuantizeOp(input5SINT8QuantParams.getZeroPoint(), input5SINT8QuantParams.getScale()))
-                            .add(new CastOp(DataType.UINT8))
-                            .build();
-            yolov5sTfliteInput = new TensorImage(DataType.UINT8);
-        }else{
-            imageProcessor =
-                    new ImageProcessor.Builder()
-                            .add(new ResizeOp(INPNUT_SIZE.getHeight(), INPNUT_SIZE.getWidth(), ResizeOp.ResizeMethod.BILINEAR))
-                            .add(new NormalizeOp(0, 255))
-                            .build();
-            yolov5sTfliteInput = new TensorImage(DataType.FLOAT32);
+        tfliteInput.load(bitmap);
+        tfliteInput = processor.process(tfliteInput);
+        TensorBuffer output = TensorBuffer.createFixedSize(OUTPUT_SIZE, DataType.FLOAT32);
+        if (Objects.isNull(tflite)) return null;
+        // 这里tflite默认会加一个的纬度 输入:[1,320,320,3] 输出[1,6300,6]
+        tflite.run(tfliteInput.getBuffer(), output.getBuffer());
+        //处理过后的数据float[]长度为7 分别是 x1, y1, x2, y2, conditional, area, index
+        List<float[]> metaFloat = convertTwoDimensionFloat(output);
+        if (metaFloat == null || metaFloat.size() == 0) return null;
+        List<float[]> boxes = removeBoxPriority(metaFloat);
+        return convertRectF(boxes);
+    }
+
+
+    public List<RectF> convertRectF(List<float[]> boxes) {
+        List<RectF> rectFs = new ArrayList<>();
+        for (float[] box : boxes) {
+            RectF rectF = new RectF(box[0] * 3.375f, box[1] * 4.5f, box[2] * 3.375f, box[3] * 4.5f);
+            rectFs.add(rectF);
         }
+        return rectFs;
+    }
 
-        yolov5sTfliteInput.load(bitmap);
-        yolov5sTfliteInput = imageProcessor.process(yolov5sTfliteInput);
 
+    //转换为二维数组
+    public List<float[]> convertTwoDimensionFloat(TensorBuffer buffer) {
+        //数据行数
+        int line = OUTPUT_SIZE[1];
+        //数据的col
+        int col = OUTPUT_SIZE[2];
+        float[] floatArray = buffer.getFloatArray();
+        List<float[]> result = new ArrayList<>();
+        int pointer = 0;
+        float DETECT_THRESHOLD = 0.5f;
+        for (int i = 0; i < line; i++) {
+            int index = i * col;
+            //先确定目标物体的概率
+            float conditional = floatArray[index + 4];
 
-        // yolov5s-tflite的输出是:[1, 6300, 85], 可以从v5的GitHub release处找到相关tflite模型, 输出是[0,1], 处理到320.
-        TensorBuffer probabilityBuffer;
-        if(IS_INT8){
-            probabilityBuffer = TensorBuffer.createFixedSize(OUTPUT_SIZE, DataType.UINT8);
-        }else{
-            probabilityBuffer = TensorBuffer.createFixedSize(OUTPUT_SIZE, DataType.FLOAT32);
+            if (conditional > DETECT_THRESHOLD) {
+
+                //废弃最后1列，最后一列是类别，当前只有牙齿类别
+                float[] item = new float[col + 1];
+                //x y轴进行旋转调换
+                float x = floatArray[index] * INPNUT_SIZE.getWidth();
+                float y = floatArray[index + 1] * INPNUT_SIZE.getHeight();
+                float w = floatArray[index + 2] * INPNUT_SIZE.getWidth();
+                float h = floatArray[index + 3] * INPNUT_SIZE.getHeight();
+
+                //x y是中心点坐标，w，h是框的长度和宽度
+                float top_x = Math.max(0, x - w / 2.0f);
+                float top_y = Math.max(0, y - h / 2.0f);
+                float bottom_x = Math.min(INPNUT_SIZE.getWidth(), x + w / 2.0f);
+                float bottom_y = Math.min(INPNUT_SIZE.getHeight(), y + h / 2.0f);
+
+                item[0] = top_x;
+                item[1] = top_y;
+                item[2] = bottom_x;
+                item[3] = bottom_y;
+                item[4] = conditional;
+                item[5] = (bottom_x - top_x + 1) * (bottom_y - top_y + 1);
+                //最后一位存放数组的索引
+                item[6] = pointer;
+                result.add(item);
+                pointer++;
+            }
         }
+        return result;
+    }
 
-        // 推理计算
-        if (null != tflite) {
-            // 这里tflite默认会加一个batch=1的纬度
-            tflite.run(yolov5sTfliteInput.getBuffer(), probabilityBuffer.getBuffer());
-        }
+    public List<float[]> removeBoxPriority(List<float[]> dets) {
+        //优先级队列根据概率进行排序，定义队列排序规则
+        PriorityQueue<float[]> priorityQueue = new PriorityQueue<>(dets.size(), (a, b) -> -Float.compare(a[4], b[4]));
+        priorityQueue.addAll(dets);
+        List<float[]> keep = new ArrayList<>();
 
-        // 这里输出反量化,需要是模型tflite.run之后执行.
-        if(IS_INT8){
-            TensorProcessor tensorProcessor = new TensorProcessor.Builder()
-                    .add(new DequantizeOp(output5SINT8QuantParams.getZeroPoint(), output5SINT8QuantParams.getScale()))
-                    .build();
-            probabilityBuffer = tensorProcessor.process(probabilityBuffer);
-        }
+        float IOU_THRESHOLD = 0.5f;
+        while (!priorityQueue.isEmpty()) {
+            //取出头部元素
+            float[] select = priorityQueue.peek();
+            if (select == null) {
+                break;
+            }
 
-        // 输出数据被平铺了出来
-        float[] recognitionArray = probabilityBuffer.getFloatArray();
-        // 这里将flatten的数组重新解析(xywh,obj,classes).
-        ArrayList<Recognition> allRecognitions = new ArrayList<>();
-        for (int i = 0; i < OUTPUT_SIZE[1]; i++) {
-            int gridStride = i * OUTPUT_SIZE[2];
-            // 由于yolov5作者在导出tflite的时候对输出除以了image size, 所以这里需要乘回去
-            float x = recognitionArray[0 + gridStride] * INPNUT_SIZE.getWidth();
-            float y = recognitionArray[1 + gridStride] * INPNUT_SIZE.getHeight();
-            float w = recognitionArray[2 + gridStride] * INPNUT_SIZE.getWidth();
-            float h = recognitionArray[3 + gridStride] * INPNUT_SIZE.getHeight();
-            int xmin = (int) Math.max(0, x - w / 2.);
-            int ymin = (int) Math.max(0, y - h / 2.);
-            int xmax = (int) Math.min(INPNUT_SIZE.getWidth(), x + w / 2.);
-            int ymax = (int) Math.min(INPNUT_SIZE.getHeight(), y + h / 2.);
-            float confidence = recognitionArray[4 + gridStride];
-            float[] classScores = Arrays.copyOfRange(recognitionArray, 5 + gridStride, this.OUTPUT_SIZE[2] + gridStride);
-//            if(i % 1000 == 0){
-//                Log.i("tfliteSupport","x,y,w,h,conf:"+x+","+y+","+w+","+h+","+confidence);
-//            }
-            int labelId = 0;
-            float maxLabelScores = 0.f;
-            for (int j = 0; j < classScores.length; j++) {
-                if (classScores[j] > maxLabelScores) {
-                    maxLabelScores = classScores[j];
-                    labelId = j;
+
+            keep.add(select);
+            //遍历队列中所有的元素
+            Iterator<float[]> it = priorityQueue.iterator();
+            while (it.hasNext()) {
+                float[] item = it.next();
+                float max_x = Math.max(select[0], item[0]);
+                float max_y = Math.max(select[1], item[1]);
+                float min_x = Math.min(select[2], item[2]);
+                float min_y = Math.min(select[3], item[3]);
+
+                float overlap = Math.max(0, min_x - max_x + 1) * Math.max(0, min_y - max_y + 1);
+
+                Float area = item[5];
+                Float selectArea = select[5];
+                float iou = overlap / (selectArea + area - overlap);
+
+                if (iou > IOU_THRESHOLD) {
+                    it.remove();
                 }
             }
 
-
-            Recognition r = new Recognition(
-                    labelId,
-                    "",
-                    maxLabelScores,
-                    confidence,
-                    new RectF(xmin, ymin, xmax, ymax));
-            allRecognitions.add(
-                    r);
         }
-//        Log.i("tfliteSupport", "recognize data size: "+allRecognitions.size());
-
-        // 非极大抑制输出
-        ArrayList<Recognition> nmsRecognitions = nms(allRecognitions);
-        // 第二次非极大抑制, 过滤那些同个目标识别到2个以上目标边框为不同类别的
-        ArrayList<Recognition> nmsFilterBoxDuplicationRecognitions = nmsAllClass(nmsRecognitions);
-
-        // 更新label信息
-        for(Recognition recognition : nmsFilterBoxDuplicationRecognitions){
-            int labelId = recognition.getLabelId();
-            String labelName = associatedAxisLabels.get(labelId);
-            recognition.setLabelName(labelName);
-        }
-
-        return nmsFilterBoxDuplicationRecognitions;
-    }
-
-    /**
-     * 非极大抑制
-     *
-     * @param allRecognitions
-     * @return
-     */
-    protected ArrayList<Recognition> nms(ArrayList<Recognition> allRecognitions) {
-        ArrayList<Recognition> nmsRecognitions = new ArrayList<Recognition>();
-
-        // 遍历每个类别, 在每个类别下做nms
-        for (int i = 0; i < OUTPUT_SIZE[2]-5; i++) {
-            // 这里为每个类别做一个队列, 把labelScore高的排前面
-            PriorityQueue<Recognition> pq =
-                    new PriorityQueue<Recognition>(
-                            6300,
-                            new Comparator<Recognition>() {
-                                @Override
-                                public int compare(final Recognition l, final Recognition r) {
-                                    // Intentionally reversed to put high confidence at the head of the queue.
-                                    return Float.compare(r.getConfidence(), l.getConfidence());
-                                }
-                            });
-
-            // 相同类别的过滤出来, 且obj要大于设定的阈值
-            for (int j = 0; j < allRecognitions.size(); ++j) {
-//                if (allRecognitions.get(j).getLabelId() == i) {
-                if (allRecognitions.get(j).getLabelId() == i && allRecognitions.get(j).getConfidence() > DETECT_THRESHOLD) {
-                    pq.add(allRecognitions.get(j));
-//                    Log.i("tfliteSupport", allRecognitions.get(j).toString());
-                }
-            }
-
-            // nms循环遍历
-            while (pq.size() > 0) {
-                // 概率最大的先拿出来
-                Recognition[] a = new Recognition[pq.size()];
-                Recognition[] detections = pq.toArray(a);
-                Recognition max = detections[0];
-                nmsRecognitions.add(max);
-                pq.clear();
-
-                for (int k = 1; k < detections.length; k++) {
-                    Recognition detection = detections[k];
-                    if (boxIou(max.getLocation(), detection.getLocation()) < IOU_THRESHOLD) {
-                        pq.add(detection);
-                    }
-                }
-            }
-        }
-        return nmsRecognitions;
-    }
-
-    /**
-     * 对所有数据不区分类别做非极大抑制
-     *
-     * @param allRecognitions
-     * @return
-     */
-    protected ArrayList<Recognition> nmsAllClass(ArrayList<Recognition> allRecognitions) {
-        ArrayList<Recognition> nmsRecognitions = new ArrayList<Recognition>();
-
-        PriorityQueue<Recognition> pq =
-                new PriorityQueue<Recognition>(
-                        100,
-                        new Comparator<Recognition>() {
-                            @Override
-                            public int compare(final Recognition l, final Recognition r) {
-                                // Intentionally reversed to put high confidence at the head of the queue.
-                                return Float.compare(r.getConfidence(), l.getConfidence());
-                            }
-                        });
-
-        // 相同类别的过滤出来, 且obj要大于设定的阈值
-        for (int j = 0; j < allRecognitions.size(); ++j) {
-            if (allRecognitions.get(j).getConfidence() > DETECT_THRESHOLD) {
-                pq.add(allRecognitions.get(j));
-            }
-        }
-
-        while (pq.size() > 0) {
-            // 概率最大的先拿出来
-            Recognition[] a = new Recognition[pq.size()];
-            Recognition[] detections = pq.toArray(a);
-            Recognition max = detections[0];
-            nmsRecognitions.add(max);
-            pq.clear();
-
-            for (int k = 1; k < detections.length; k++) {
-                Recognition detection = detections[k];
-                if (boxIou(max.getLocation(), detection.getLocation()) < IOU_CLASS_DUPLICATED_THRESHOLD) {
-                    pq.add(detection);
-                }
-            }
-        }
-        return nmsRecognitions;
-    }
-
-
-    protected float boxIou(RectF a, RectF b) {
-        float intersection = boxIntersection(a, b);
-        float union = boxUnion(a, b);
-        if (union <= 0) return 1;
-        return intersection / union;
-    }
-
-    protected float boxIntersection(RectF a, RectF b) {
-        float maxLeft = a.left > b.left ? a.left : b.left;
-        float maxTop = a.top > b.top ? a.top : b.top;
-        float minRight = a.right < b.right ? a.right : b.right;
-        float minBottom = a.bottom < b.bottom ? a.bottom : b.bottom;
-        float w = minRight -  maxLeft;
-        float h = minBottom - maxTop;
-
-        if (w < 0 || h < 0) return 0;
-        float area = w * h;
-        return area;
-    }
-
-    protected float boxUnion(RectF a, RectF b) {
-        float i = boxIntersection(a, b);
-        float u = (a.right - a.left) * (a.bottom - a.top) + (b.right - b.left) * (b.bottom - b.top) - i;
-        return u;
+        return keep;
     }
 
     /**
@@ -376,6 +215,21 @@ public class Yolov5TFLiteDetector {
             Log.i("tfliteSupport", "using nnapi delegate.");
         }
     }
+
+
+//    public void addNnapi() {
+//        // Initialize interpreter with NNAPI delegate for Android Pie or above
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+//            NnApiDelegate.Options nnApiOptions = new NnApiDelegate.Options();
+//            nnApiOptions.setAllowFp16(false);
+//            nnApiOptions.setUseNnapiCpu(true);
+//            nnApiOptions.setExecutionPreference(NnApiDelegate.Options.EXECUTION_PREFERENCE_SUSTAINED_SPEED);
+//            NnApiDelegate nnApiDelegate = new NnApiDelegate(nnApiOptions);
+//            options.addDelegate(nnApiDelegate);
+//        }
+
+    }
+
 
     /**
      * 添加GPU代理
