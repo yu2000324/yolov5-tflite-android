@@ -99,20 +99,12 @@ public class FullImageAnalyse implements ImageAnalysis.Analyzer {
             matrix.postRotate(90);
            Bitmap modelInputBitmap= Bitmap.createBitmap(imageBitmap, 0, 0, imageBitmap.getWidth(), imageBitmap.getHeight(),
                             matrix, false);
-           long model_start= System.currentTimeMillis();
             List<RectF> rectFs = yolov5TFLiteDetector.detect(modelInputBitmap);
-            long model_end=System.currentTimeMillis();
-
-//            ArrayList<Recognition> recognitions = yolov5TFLiteDetector.detect(imageBitmap);
             Bitmap emptyCropSizeBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Bitmap.Config.ARGB_8888);
             Canvas cropCanvas = new Canvas(emptyCropSizeBitmap);
-//            Paint white = new Paint();
-//            white.setColor(Color.WHITE);
-//            white.setStyle(Paint.Style.FILL);
-//            cropCanvas.drawRect(new RectF(0,0,previewWidth, previewHeight), white);
             // 边框画笔
             Paint boxPaint = new Paint();
-            boxPaint.setStrokeWidth(5);
+            boxPaint.setStrokeWidth(10);
             boxPaint.setStyle(Paint.Style.STROKE);
             boxPaint.setColor(Color.RED);
             // 字体画笔
@@ -124,14 +116,12 @@ public class FullImageAnalyse implements ImageAnalysis.Analyzer {
             if (rectFs!=null ){
                 for (RectF rectF : rectFs) {
                     cropCanvas.drawRect(rectF, boxPaint);
-//                  modelToPreviewTransform.mapRect(rectF);
                 }
             }
             long end = System.currentTimeMillis();
             long costTime = (end - start);
             image.close();
             emitter.onNext(new Result(costTime, emptyCropSizeBitmap));
-//            emitter.onNext(new Result(costTime, imageBitmap));
 
         }).subscribeOn(Schedulers.io()) // 这里定义被观察者,也就是上面代码的线程, 如果没定义就是主线程同步, 非异步
                 // 这里就是回到主线程, 观察者接受到emitter发送的数据进行处理

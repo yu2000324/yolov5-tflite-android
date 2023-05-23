@@ -88,12 +88,16 @@ public class Yolov5TFLiteDetector {
         tfliteInput.load(bitmap);
         tfliteInput = processor.process(tfliteInput);
         TensorBuffer output = TensorBuffer.createFixedSize(OUTPUT_SIZE, DataType.FLOAT32);
-        if (Objects.isNull(tflite)) return null;
+        if (Objects.isNull(tflite)){
+            return null;
+        }
         // 这里tflite默认会加一个的纬度 输入:[1,320,320,3] 输出[1,6300,6]
         tflite.run(tfliteInput.getBuffer(), output.getBuffer());
         //处理过后的数据float[]长度为7 分别是 x1, y1, x2, y2, conditional, area, index
         List<float[]> metaFloat = convertTwoDimensionFloat(output);
-        if (metaFloat == null || metaFloat.size() == 0) return null;
+        if (metaFloat == null || metaFloat.size() == 0) {
+            return null;
+        }
         List<float[]> boxes = removeBoxPriority(metaFloat);
         return convertRectF(boxes);
     }

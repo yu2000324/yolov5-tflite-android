@@ -3,21 +3,15 @@ package com.example.yolov5tfliteandroid.utils;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.params.StreamConfigurationMap;
 import android.util.Log;
-import android.util.Rational;
 import android.util.Size;
-import android.view.Surface;
 
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.AspectRatio;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
-import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
@@ -27,7 +21,6 @@ import androidx.lifecycle.LifecycleOwner;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
-import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutionException;
 
 public class CameraProcess {
@@ -65,35 +58,32 @@ public class CameraProcess {
     public void startCamera(Context context, ImageAnalysis.Analyzer analyzer, PreviewView previewView) {
 
         cameraProviderFuture = ProcessCameraProvider.getInstance(context);
-        cameraProviderFuture.addListener(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-                    ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
+        cameraProviderFuture.addListener(() -> {
+            try {
+                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+                ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
 //                            .setTargetResolution(new Size(1080, 1920))
-                            .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
 //                            .setTargetAspectRatioCustom(new Rational(16,9))
 //                            .setTargetRotation(Surface.ROTATION_90)
-                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                            .build();
-                    imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(context), analyzer);
-                    Preview previewBuilder = new Preview.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build();
+                imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(context), analyzer);
+                Preview previewBuilder = new Preview.Builder()
 //                            .setTargetResolution(new Size(1080,1440))
-                            .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
 //                            .setTargetRotation(Surface.ROTATION_90)
-                            .build();
+                        .build();
 //                    Log.i("builder", previewView.getHeight()+"/"+previewView.getWidth());
-                    CameraSelector cameraSelector = new CameraSelector.Builder()
-                            .requireLensFacing(CameraSelector.LENS_FACING_BACK).build();
-                    previewBuilder.setSurfaceProvider(previewView.createSurfaceProvider());
-                    // 加多这一步是为了切换不同视图的时候能释放上一视图所有绑定事件
-                    cameraProvider.unbindAll();
-                    cameraProvider.bindToLifecycle((LifecycleOwner) context, cameraSelector, imageAnalysis, previewBuilder);
+                CameraSelector cameraSelector = new CameraSelector.Builder()
+                        .requireLensFacing(CameraSelector.LENS_FACING_BACK).build();
+                previewBuilder.setSurfaceProvider(previewView.createSurfaceProvider());
+                // 加多这一步是为了切换不同视图的时候能释放上一视图所有绑定事件
+                cameraProvider.unbindAll();
+                cameraProvider.bindToLifecycle((LifecycleOwner) context, cameraSelector, imageAnalysis, previewBuilder);
 
-                } catch (ExecutionException | InterruptedException e) {
-                    e.printStackTrace();
-                }
+            } catch (ExecutionException | InterruptedException e) {
+                e.printStackTrace();
             }
         }, ContextCompat.getMainExecutor(context));
     }
